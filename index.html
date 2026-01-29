@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>월드컵/퀴즈 멀티 MVP</title>
+  <link rel="stylesheet" href="./styles.css" />
+
+  <!-- Socket.IO client (백엔드가 socket.io를 쓰는 경우) -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+
+  <!-- Supabase Auth (로그인/토큰 발급) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">🥊 Worldcup / Quiz MVP</div>
+    <div class="right">
+      <span id="authState" class="muted">로그인 필요(멀티/제작)</span>
+      <button id="btnLogout" class="btn ghost hidden">로그아웃</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 로그인 -->
+    <section class="card">
+      <h2>로그인 (Supabase Auth)</h2>
+      <p class="muted">멀티/방 생성/입장은 로그인 필수</p>
+      <div class="row">
+        <input id="email" class="input" type="email" placeholder="email" />
+        <input id="password" class="input" type="password" placeholder="password" />
+      </div>
+      <div class="row">
+        <button id="btnSignUp" class="btn">회원가입</button>
+        <button id="btnSignIn" class="btn primary">로그인</button>
+      </div>
+      <p id="authMsg" class="muted"></p>
+    </section>
+
+    <!-- 멀티 로비 -->
+    <section class="card">
+      <h2>멀티 로비</h2>
+      <p class="muted">
+        백엔드 Socket 서버에 연결해서 방 생성/입장.
+        (현재: 월드컵 멀티 1라운드 화면 뼈대)
+      </p>
+
+      <div class="grid2">
+        <div class="box">
+          <h3>방 만들기(호스트)</h3>
+          <div class="row">
+            <input id="contentId" class="input" placeholder="콘텐츠 ID (UUID)" />
+          </div>
+          <div class="row">
+            <input id="hostName" class="input" placeholder="내 닉네임(호스트)" />
+          </div>
+          <div class="row">
+            <label class="check">
+              <input id="timerEnabled" type="checkbox" checked />
+              타이머 ON
+            </label>
+            <input id="timerSec" class="input small" type="number" min="10" max="180" value="45" />
+            <span class="muted">초</span>
+          </div>
+          <div class="row">
+            <button id="btnCreateRoom" class="btn primary">방 생성</button>
+          </div>
+          <p class="muted">생성 후 방코드가 아래에 표시됨</p>
+        </div>
+
+        <div class="box">
+          <h3>방 입장(게스트)</h3>
+          <div class="row">
+            <input id="joinName" class="input" placeholder="내 닉네임(게스트)" />
+          </div>
+          <div class="row">
+            <input id="roomId" class="input" placeholder="방 코드 (예: Ab12CdEf)" />
+            <button id="btnJoinRoom" class="btn">입장</button>
+          </div>
+          <p class="muted">방 코드는 호스트가 공유한 코드</p>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <div class="pill">연결 상태: <b id="connState">DISCONNECTED</b></div>
+        <div class="pill">현재 방: <b id="currentRoom">-</b></div>
+        <div class="pill">콘텐츠: <b id="contentTitle">-</b></div>
+      </div>
+
+      <div class="row">
+        <button id="btnStartGame" class="btn primary hidden">호스트 시작</button>
+        <button id="btnLeaveRoom" class="btn ghost hidden">방 나가기</button>
+      </div>
+
+      <div class="row">
+        <div class="box flex1">
+          <h3>방 참가자 / 상태</h3>
+          <ul id="playerList" class="list"></ul>
+        </div>
+        <div class="box flex1">
+          <h3>로그</h3>
+          <pre id="log" class="log"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 월드컵 플레이 화면 -->
+    <section id="worldcupSection" class="card hidden">
+      <h2 id="worldcupTitle">월드컵 멀티(동시선택) — 라운드 0/0</h2>
+      <p class="muted">
+        ✅ 내가 고른 건 나만 보임<br/>
+        ✅ 상대는 선택 중이면 “선택 중…” 표시<br/>
+        ✅ 전원 선택 완료 시 결과 공개
+      </p>
+
+      <div class="match">
+        <button id="btnChoiceA" class="choice">
+          <img id="imgA" class="choiceImg hidden" alt="" />
+          <div class="choiceTitle">A</div>
+          <div id="titleA" class="choiceText">후보 A</div>
+        </button>
+
+        <div class="vs">VS</div>
+
+        <button id="btnChoiceB" class="choice">
+          <img id="imgB" class="choiceImg hidden" alt="" />
+          <div class="choiceTitle">B</div>
+          <div id="titleB" class="choiceText">후보 B</div>
+        </button>
+      </div>
+
+      <div class="row">
+        <div class="pill">내 선택: <b id="myPick">-</b></div>
+        <div class="pill">진행: <b id="roundState">대기</b></div>
+        <div id="timerPill" class="pill hidden">남은 시간: <b id="timerDisplay">-</b></div>
+      </div>
+
+      <div id="waitingPanel" class="notice hidden">
+        상대방 선택 중… ⏳ (전원 선택 완료되면 결과가 공개됨)
+      </div>
+
+      <div id="revealPanel" class="notice hidden">
+        <b>결과 공개!</b>
+        <div id="revealText" class="muted"></div>
+      </div>
+
+      <div class="row">
+        <button id="btnNextRound" class="btn primary hidden">다음 라운드</button>
+      </div>
+
+      <div id="finishedPanel" class="notice hidden">
+        <b>게임 종료!</b>
+        <div id="finishedContent"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer muted">
+    MVP Skeleton — Cloudflare Pages(정적) + Supabase Auth + Socket.IO 멀티
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
