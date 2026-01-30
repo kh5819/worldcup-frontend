@@ -322,7 +322,8 @@ $("btnSaveQuiz")?.addEventListener("click", async () => {
         q.choices = choices;
 
         // ✅ (추천) 정답은 숫자로 저장
-        q.answer = [Number(correctIdx)];
+        q.answer = [String(correctIdx)];
+
 
       } else if (type === "short") {
         const answer = document.querySelector(`input[data-q="${i}"][data-field="answer"]`)?.value.trim() || "";
